@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>北斗七星</title>
+
+<style>
+body{
+  font-family:sans-serif;
+  padding:20px;
+  background:#fff7d1;
+}
+
+input,button,select{
+  font-size:18px;
+  padding:8px;
+  margin:5px 0;
+}
+
+#noteText{
+  width:100%;
+  height:300px;
+  padding:20px 30px;
+  background:#fffdf5;
+  border:1px solid #d8c9a7;
+  border-radius:8px;
+  font-size:16px;
+  line-height:1.8;
+  font-family:"Yu Mincho",serif;
+  box-shadow:0 0 10px rgba(0,0,0,0.1);
+  background-image:
+    linear-gradient(to bottom,transparent,transparent),
+    repeating-linear-gradient(
+      to bottom,
+      #fffdf5 0px,
+      #fffdf5 28px,
+      #e8dcc2 29px
+    );
+  border-left:4px solid #ffe9a3;
+}
+</style>
+</head>
+<body>
+
+<h1>北斗七星</h1>
+
+<!-- ▼ ファイル生成 -->
+<h2>ファイル生成</h2>
+<div>ファイル名</div>
+<input id="fileTitle">
+<div>パスワード</div>
+<input id="filePassword" type="password">
+<br><br>
+<button id="createBtn" onclick="createFile()" disabled>生成</button>
+
+<hr>
+
+<!-- ▼ 自分のファイル選択 -->
+<h2>ファイル選択</h2>
+<select id="fileSelect"></select>
+<button onclick="openSelectedFile()">開く</button>
+<button onclick="changePassword()">パスワード変更</button>
+<button onclick="deleteFile()">削除</button>
+
+<hr>
+
+<!-- ▼ ノート一覧 -->
+<h2>ノート一覧</h2>
+<div id="notesList"></div>
+<button id="addNoteBtn" onclick="addNote()" disabled>＋ノートを追加</button>
+
+<hr>
+
+<!-- ▼ ノート内容 -->
+<h2>ノート内容</h2>
+<textarea id="noteText"></textarea><br>
+<button onclick="saveNote()">保存</button>
+<button onclick="closeFile()">閉じる</button>
+
+<hr>
+
+<!-- ▼ 他の人のノートを見る -->
+<h2>他の人のノートをみる</h2>
+<div>パスワードをいれてください</div>
+<input id="otherPassword" type="password">
+<button onclick="openByPassword()">開く</button>
+
+<hr>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  doc,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+import {
+  getAuth,
+  signInAnonymously,
+  browserLocalPersistence,
+  setPersistence
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+/* Firebase設定 */
+const firebaseConfig = {
+  apiKey: "AIzaSyBPl_QKfAZM8TmWEtbi4rXb4ZasdM9WOQg",
+  authDomain: "hokutoshitisei.firebaseapp.com",
+  projectId: "hokutoshitisei",
+  storageBucket: "hokutoshitisei.appspot.com",
+  messagingSenderId: "16257405689",
+  appId: "1:16257405689:web:17e7b92362c56d82b48828",
+  measurementId: "G-LFGEC7VKN3"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+/* ログイン後に生成ボタンを有効化 */
+setPersistence(auth, browserLocalPersistence)
+  .then(() => signInAnonymously(auth))
+  .then(() => {
+    document.getElementById("createBtn").disabled = false;
+    loadMyFiles();
+  });
+
+let currentFileId=null;
+let currentNoteId=null;
+let readOnly=false;
+
+function hash(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+/* ▼ ファイル作成 */
+window.createFile=async function(){
+  const title=fileTitle.value.trim();
+  const pass=filePassword.value.trim();
+  if(!title||!pass){
+    alert("入力してね");
+    return;
+  }
+
+  await addDoc(collection(db,"files"),{
+    title,
+    password:hash(pass),
+    ownerUid:auth.currentUser.uid,
+    createdAt:serverTimestamp()
+  });
+
+  alert("作成しました");
+  loadMyFiles();
+};
+
+/* ▼ 自分のファイル一覧 */
+async function loadMyFiles(){
+  fileSelect.innerHTML="";
+
+  const q=query(
+    collection(db,"files"),
+    where("ownerUid","==",auth.currentUser.uid),
+    orderBy("createdAt")
+  );
+
+  const snap=await getDocs(q);
+
+  snap.forEach(d=>{
+    const op=document.createElement("option");
+    op.value=d.id;
+    op.textContent=d.data().title;
+    fileSelect.appendChild(op);
+  });
+}
+
+/* ▼ 自分のファイルを開く（パスワード不要） */
+window.openSelectedFile=function(){
+  const fileId=fileSelect.value;
+  if(!fileId){
+    alert("ファイルなし");
+    return;
+  }
+  readOnly=false;
+  currentFileId=fileId;
+  addNoteBtn.disabled=false;
+  loadNotes();
+};
+
+/* ▼ 他人のファイルをパスワードで開く */
+window.openByPassword=async function(){
+  const pass=otherPassword.value.trim();
+  if(!pass){
+    alert("パスワードを入力してね");
+    return;
+  }
+
+  const q=query(collection(db,"files"));
+  const snap=await getDocs(q);
+
+  let found=null;
+
+  snap.forEach(d=>{
+    if(d.data().password===hash(pass)){
+      found=d;
+    }
+  });
+
+  if(!found){
+    alert("見つからないよ");
+    return;
+  }
+
+  currentFileId=found.id;
+  readOnly=true;
+  addNoteBtn.disabled=true;
+  loadNotes();
+};
+
+/* ▼ ノート一覧 */
+async function loadNotes(){
+  notesList.innerHTML="";
+
+  const q=query(
+    collection(db,"files",currentFileId,"notes"),
+    orderBy("createdAt")
+  );
+
+  const snap=await getDocs(q);
+
+  snap.forEach(d=>{
+    const data=d.data();
+    const div=document.createElement("div");
+    div.innerHTML=`
+      ${data.title}
+      <button onclick="viewNote('${d.id}')">開く</button>
+      ${!readOnly ? `<button onclick="editNote('${d.id}')">編集</button>` : ""}
+      ${!readOnly ? `<button onclick="deleteNote('${d.id}')">削除</button>` : ""}
+    `;
+    notesList.appendChild(div);
+  });
+}
+
+/* ▼ ノート追加（自分のファイルのみ） */
+window.addNote=async function(){
+  if(readOnly)return;
+
+  const title=prompt("ノート名");
+  if(!title)return;
+
+  await addDoc(
+    collection(db,"files",currentFileId,"notes"),
+    {
+      title,
+      content:"",
+      createdAt:serverTimestamp()
+    }
+  );
+
+  loadNotes();
+};
+
+/* ▼ ノート表示 */
+window.viewNote=async function(noteId){
+  currentNoteId=noteId;
+  const snap=await getDoc(
+    doc(db,"files",currentFileId,"notes",noteId)
+  );
+  noteText.value=snap.data().content;
+  noteText.disabled=true;
+};
+
+/* ▼ ノート編集 */
+window.editNote=async function(noteId){
+  if(readOnly)return;
+
+  currentNoteId=noteId;
+  const snap=await getDoc(
+    doc(db,"files",currentFileId,"notes",noteId)
+  );
+  noteText.value=snap.data().content;
+  noteText.disabled=false;
+};
+
+/* ▼ 保存 */
+window.saveNote=async function(){
+  if(readOnly)return;
+
+  await updateDoc(
+    doc(db,"files",currentFileId,"notes",currentNoteId),
+    { content:noteText.value }
+  );
+  alert("保存した");
+};
+
+/* ▼ ノート削除 */
+window.deleteNote=async function(noteId){
+  if(readOnly)return;
+
+  if(!confirm("削除する？"))return;
+  await deleteDoc(
+    doc(db,"files",currentFileId,"notes",noteId)
+  );
+  loadNotes();
+};
+
+/* ▼ パスワード変更 */
+window.changePassword = async function () {
+  if (!currentFileId) {
+    alert("ファイルを開いてください");
+    return;
+  }
+
+  if (readOnly) {
+    alert("他人のファイルは変更できません");
+    return;
+  }
+
+  const newPass = prompt("新しいパスワードを入力してください");
+  if (!newPass) return;
+
+  await updateDoc(doc(db, "files", currentFileId), {
+    password: hash(newPass)
+  });
+
+  alert("パスワードを変更しました");
+};
+
+/* ▼ 閉じる */
+window.closeFile=function(){
+  currentFileId=null;
+  currentNoteId=null;
+  notesList.innerHTML="";
+  noteText.value="";
+  addNoteBtn.disabled=true;
+};
+
+</script>
+
+</body>
+</html>
