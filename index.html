@@ -79,6 +79,7 @@ input,button,select{
 <button onclick="openSelectedFile()">開く</button>
 <button onclick="changePassword()">パスワード変更</button>
 <button onclick="deleteFile()">削除</button>
+<button onclick="closeFile()">ファイルを閉じる</button>
 
 <hr>
 
@@ -393,7 +394,19 @@ window.closeNote = function () {
   hideNote();
 };
 
-/* ▼ ファイル削除（ノートも全削除してから本体削除） */
+/* ▼ ファイルを閉じる（自分のも他人のも） */
+window.closeFile = function () {
+  currentFileId = null;
+  currentNoteId = null;
+
+  document.getElementById("notesList").innerHTML = "";
+  hideNote();
+  document.getElementById("addNoteBtn").disabled = true;
+
+  alert("ファイルを閉じました");
+};
+
+/* ▼ ファイル削除 */
 window.deleteFile = async function () {
   if (!currentFileId) {
     alert("ファイルを選んでください");
