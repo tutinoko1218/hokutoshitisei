@@ -371,6 +371,38 @@ window.closeNote = function () {
   hideNote();
 };
 
+/* ▼ ファイル削除（ノートも全削除してから本体削除） */
+window.deleteFile = async function () {
+  if (!currentFileId) {
+    alert("ファイルを選んでください");
+    return;
+  }
+
+  if (!confirm("本当に削除しますか？")) return;
+
+  // ▼ ① notes を全部削除
+  const notesSnap = await getDocs(
+    collection(db, "files", currentFileId, "notes")
+  );
+
+  for (const n of notesSnap.docs) {
+    await deleteDoc(doc(db, "files", currentFileId, "notes", n.id));
+  }
+
+  // ▼ ② ファイル本体を削除
+  await deleteDoc(doc(db, "files", currentFileId));
+
+  alert("ファイルを削除しました");
+
+  currentFileId = null;
+  currentNoteId = null;
+  notesList.innerHTML = "";
+  hideNote();
+  addNoteBtn.disabled = true;
+
+  loadMyFiles();
+};
+
 /* ▼ パスワード変更 */
 window.changePassword = async function () {
   if (!currentFileId) {
