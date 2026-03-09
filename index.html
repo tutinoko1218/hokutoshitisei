@@ -99,7 +99,10 @@ input,button,select{
 
 <h2>他の人のノートをみる</h2>
 <div>パスワードをいれてください</div>
+
+<!-- ▼ ここに目玉マークを追加 -->
 <input id="otherPassword" type="password">
+<button onclick="togglePassword()">👁️</button>
 <button onclick="openByPassword()">開く</button>
 
 <hr>
@@ -163,6 +166,12 @@ function hideNote(){
 function showNote(){
   noteText.style.display="block";
 }
+
+/* ▼ パスワード目玉マーク */
+window.togglePassword = function () {
+  const input = document.getElementById("otherPassword");
+  input.type = (input.type === "password") ? "text" : "password";
+};
 
 /* ▼ ログイン後 */
 setPersistence(auth, browserLocalPersistence)
@@ -229,22 +238,22 @@ window.openSelectedFile=function(){
   loadNotes();
 };
 
-/* ▼ 他人のファイルを開く */
-window.openByPassword=async function(){
-  const pass=otherPassword.value.trim();
+/* ▼ 他人のファイルを開く（目玉マーク対応済み） */
+window.openByPassword = async function(){
+  const pass = otherPassword.value.trim();
   if(!pass){
     alert("パスワードを入力してね");
     return;
   }
 
-  const q=query(collection(db,"files"));
-  const snap=await getDocs(q);
+  const q = query(collection(db,"files"));
+  const snap = await getDocs(q);
 
-  let found=null;
+  let found = null;
 
   snap.forEach(d=>{
-    if(d.data().password===hash(pass)){
-      found=d;
+    if(d.data().password === hash(pass)){
+      found = d;
     }
   });
 
@@ -253,9 +262,9 @@ window.openByPassword=async function(){
     return;
   }
 
-  currentFileId=found.id;
-  readOnly=true;
-  addNoteBtn.disabled=true;
+  currentFileId = found.id;
+  readOnly = true;
+  addNoteBtn.disabled = true;
 
   hideNote();
   loadNotes();
@@ -365,7 +374,7 @@ window.deleteNote=async function(noteId){
   loadNotes();
 };
 
-/* ▼ ノートだけ閉じる（ファイルは閉じない） */
+/* ▼ ノートだけ閉じる */
 window.closeNote = function () {
   currentNoteId = null;
   hideNote();
@@ -380,7 +389,6 @@ window.deleteFile = async function () {
 
   if (!confirm("本当に削除しますか？")) return;
 
-  // ▼ ① notes を全部削除
   const notesSnap = await getDocs(
     collection(db, "files", currentFileId, "notes")
   );
@@ -389,7 +397,6 @@ window.deleteFile = async function () {
     await deleteDoc(doc(db, "files", currentFileId, "notes", n.id));
   }
 
-  // ▼ ② ファイル本体を削除
   await deleteDoc(doc(db, "files", currentFileId));
 
   alert("ファイルを削除しました");
