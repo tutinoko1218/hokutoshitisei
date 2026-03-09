@@ -75,7 +75,7 @@ input,button,select{
 <hr>
 
 <h2>ファイル選択</h2>
-<select id="fileSelect"></select>
+<select id="fileSelect" onchange="selectFileChanged()"></select>
 <button onclick="openSelectedFile()">開く</button>
 <button onclick="changePassword()">パスワード変更</button>
 <button onclick="deleteFile()">削除</button>
@@ -172,6 +172,12 @@ function showNote(){
 window.togglePassword = function () {
   const input = document.getElementById("otherPassword");
   input.type = (input.type === "password") ? "text" : "password";
+};
+
+/* ▼ スマホ対策：選択した瞬間に currentFileId を更新 */
+window.selectFileChanged = function () {
+  const fileSelect = document.getElementById("fileSelect");
+  currentFileId = fileSelect.value;
 };
 
 /* ▼ ログイン後 */
