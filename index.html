@@ -75,7 +75,13 @@ input,button,select{
 <hr>
 
 <h2>ファイル選択</h2>
-<select id="fileSelect" onchange="selectFileChanged()"></select>
+
+<!-- ★★★ スマホ対応の3イベント付き（重要） ★★★ -->
+<select id="fileSelect"
+        onchange="selectFileChanged()"
+        onclick="selectFileChanged()"
+        ontouchstart="selectFileChanged()"></select>
+
 <button onclick="openSelectedFile()">開く</button>
 <button onclick="changePassword()">パスワード変更</button>
 <button onclick="deleteFile()">削除</button>
@@ -106,7 +112,6 @@ input,button,select{
 <button onclick="openByPassword()">開く</button>
 
 <hr>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
@@ -335,6 +340,11 @@ window.addNote = async function(){
   showNote();
 
   loadNotes();
+
+  /* ▼ スマホ対策：追加したノートのIDを復元 */
+  setTimeout(() => {
+    currentNoteId = newNote.id;
+  }, 200);
 };
 
 /* ▼ ノート観覧 */
