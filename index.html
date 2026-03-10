@@ -76,7 +76,7 @@ input,button,select{
 
 <h2>ファイル選択</h2>
 
-<!-- ★ スマホ対応：3イベント＋後でJS側でも再取得する -->
+<!-- ★ スマホ対応：3イベント -->
 <select id="fileSelect"
         onchange="selectFileChanged()"
         onclick="selectFileChanged()"
@@ -319,7 +319,7 @@ async function loadNotes(){
   });
 }
 
-/* ▼ ノート追加 */
+/* ▼ ノート追加（★ ownerUid 追加済み） */
 window.addNote = async function(){
   if(readOnly)return;
 
@@ -331,7 +331,8 @@ window.addNote = async function(){
     {
       title,
       content:"",
-      createdAt:serverTimestamp()
+      ownerUid: auth.currentUser.uid,   // ★ スマホで削除できる決定打
+      createdAt: serverTimestamp()
     }
   );
 
