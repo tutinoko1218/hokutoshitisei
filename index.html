@@ -76,7 +76,7 @@ input,button,select{
 
 <h2>ファイル選択</h2>
 
-<!-- ★★★ スマホ対応の3イベント付き（重要） ★★★ -->
+<!-- ★ スマホ対応：3イベント＋後でJS側でも再取得する -->
 <select id="fileSelect"
         onchange="selectFileChanged()"
         onclick="selectFileChanged()"
@@ -159,7 +159,7 @@ function hash(str){
   return btoa(unescape(encodeURIComponent(str)));
 }
 
-/* ▼ ノートを非表示にする */
+/* ▼ ノート非表示 */
 function hideNote(){
   const noteText = document.getElementById("noteText");
   noteText.value = "";
@@ -167,19 +167,19 @@ function hideNote(){
   noteText.style.display = "none";
 }
 
-/* ▼ ノートを表示する */
+/* ▼ ノート表示 */
 function showNote(){
   const noteText = document.getElementById("noteText");
   noteText.style.display = "block";
 }
 
-/* ▼ パスワード目玉マーク */
+/* ▼ パスワード目玉 */
 window.togglePassword = function () {
   const input = document.getElementById("otherPassword");
   input.type = (input.type === "password") ? "text" : "password";
 };
 
-/* ▼ スマホ対策：選択した瞬間に currentFileId を更新 */
+/* ▼ スマホ対策：選択した瞬間に更新 */
 window.selectFileChanged = function () {
   const fileSelect = document.getElementById("fileSelect");
   currentFileId = fileSelect.value;
@@ -236,16 +236,19 @@ async function loadMyFiles(){
   hideNote();
 }
 
-/* ▼ ファイルを開く */
+/* ▼ ファイルを開く（スマホ対策：ここで再取得） */
 window.openSelectedFile = function(){
   const fileSelect = document.getElementById("fileSelect");
-  const fileId = fileSelect.value;
-  if(!fileId){
+
+  /* ★ スマホ対策：ここで必ず再取得する */
+  currentFileId = fileSelect.value;
+
+  if(!currentFileId){
     alert("ファイルなし");
     return;
   }
+
   readOnly = false;
-  currentFileId = fileId;
   document.getElementById("addNoteBtn").disabled = false;
 
   hideNote();
@@ -340,11 +343,6 @@ window.addNote = async function(){
   showNote();
 
   loadNotes();
-
-  /* ▼ スマホ対策：追加したノートのIDを復元 */
-  setTimeout(() => {
-    currentNoteId = newNote.id;
-  }, 200);
 };
 
 /* ▼ ノート観覧 */
@@ -410,7 +408,7 @@ window.closeNote = function () {
   hideNote();
 };
 
-/* ▼ ファイルを閉じる（自分のも他人のも） */
+/* ▼ ファイルを閉じる */
 window.closeFile = function () {
   currentFileId = null;
   currentNoteId = null;
