@@ -1,1 +1,440 @@
-2d3651629bbfe4b5b0edab8677717cc220664db4
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>北斗七星 - 暖黄色版</title>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff7d1;
+      font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+
+    h1 {
+      text-align: center;
+      padding: 20px 0;
+      color: #5a4a00;
+    }
+
+    .section {
+      background: rgba(255,255,255,0.8);
+      border: 1px solid #e6dca8;
+      border-radius: 10px;
+      padding: 15px;
+      margin: 20px;
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #5a4a00;
+    }
+
+    input, select, textarea, button {
+      font-size: 16px;
+      padding: 8px;
+      margin: 5px 0;
+    }
+
+    button {
+      cursor: pointer;
+      border-radius: 6px;
+      border: none;
+      background: #d4a017;
+      color: white;
+      padding: 8px 14px;
+    }
+
+    button:disabled {
+      background: #c8b98a;
+    }
+
+    #notePaper {
+      background: #fff9e6;
+      border-left: 4px solid #f2d98d;
+      padding: 10px;
+      border-radius: 6px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 200px;
+      resize: vertical;
+      border: none;
+      background: transparent;
+      line-height: 1.6;
+      color: #5a4a00;
+      outline: none;
+    }
+
+    #notesList {
+      margin-top: 10px;
+    }
+
+    .noteItem {
+      background: #fff9e6;
+      border: 1px solid #e6dca8;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .noteButtons button {
+      margin-left: 5px;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>北斗七星（暖黄色）</h1>
+
+<div class="section">
+  <h2>ファイル作成</h2>
+  <input id="fileTitle" type="text" placeholder="ファイル名">
+  <input id="filePassword" type="password" placeholder="パスワード（必須）">
+  <button id="createBtn" disabled onclick="createFile()">作成</button>
+</div>
+
+<div class="section">
+  <h2>自分のファイル</h2>
+  <select id="fileSelect" onchange="selectFileChanged()"></select>
+  <button onclick="openSelectedFile()">開く</button>
+  <button onclick="deleteFile()">削除</button>
+</div>
+
+<div class="section">
+  <h2>他人のファイルを開く</h2>
+  <input id="otherPassword" type="password" placeholder="パスワード">
+  <button onclick="togglePassword()">👁</button>
+  <button onclick="openByPassword()">開く</button>
+</div>
+
+<div class="section">
+  <h2>ノート一覧</h2>
+  <button id="addNoteBtn" disabled onclick="addNote()">ノート追加</button>
+  <div id="notesList"></div>
+</div>
+
+<div class="section">
+  <h2>ノート</h2>
+  <div id="notePaper">
+    <textarea id="noteText"></textarea>
+  </div>
+  <button onclick="saveNote()">保存</button>
+  <button onclick="closeNote()">閉じる</button>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    addDoc,
+    doc,
+    getDoc,
+    updateDoc,
+    deleteDoc,
+    getDocs,
+    query,
+    where,
+    orderBy,
+    serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  import {
+    getAuth,
+    signInAnonymously,
+    browserLocalPersistence,
+    setPersistence
+  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBPl_QKfAZM8TmWEtbi4rXb4ZasdM9WOQg",
+    authDomain: "hokutoshitisei.firebaseapp.com",
+    projectId: "hokutoshitisei",
+    storageBucket: "hokutoshitisei.appspot.com",
+    messagingSenderId: "16257405689",
+    appId: "1:16257405689:web:17e7b92362c56d82b48828",
+    measurementId: "G-LFGEC7VKN3"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  let currentFileId = null;
+  let currentNoteId = null;
+  let readOnly = false;
+  let autoSaveTimer = null;
+
+  function hash(str){
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+
+  function hideNote(){
+    const noteText = document.getElementById("noteText");
+    noteText.value = "";
+    noteText.disabled = true;
+  }
+
+  window.togglePassword = function () {
+    const input = document.getElementById("otherPassword");
+    input.type = (input.type === "password") ? "text" : "password";
+  };
+
+  window.selectFileChanged = function () {
+    const fileSelect = document.getElementById("fileSelect");
+    currentFileId = fileSelect.value;
+  };
+
+  setPersistence(auth, browserLocalPersistence)
+    .then(() => signInAnonymously(auth))
+    .then(() => {
+      document.getElementById("createBtn").disabled = false;
+      loadMyFiles();
+    });
+
+  window.createFile = async function(){
+    const title = document.getElementById("fileTitle").value.trim();
+    const pass  = document.getElementById("filePassword").value.trim();
+
+    if(!title){ alert("ファイル名を入力してね"); return; }
+    if(!pass){ alert("パスワードは必須だよ"); return; }
+
+    await addDoc(collection(db,"files"),{
+      title,
+      password: hash(pass),
+      ownerUid: auth.currentUser.uid,
+      createdAt: serverTimestamp()
+    });
+
+    alert("作成しました");
+    loadMyFiles();
+  };
+
+  async function loadMyFiles(){
+    const fileSelect = document.getElementById("fileSelect");
+    fileSelect.innerHTML = "";
+
+    const q = query(
+      collection(db,"files"),
+      where("ownerUid","==",auth.currentUser.uid),
+      orderBy("createdAt")
+    );
+
+    const snap = await getDocs(q);
+
+    snap.forEach(d=>{
+      const op = document.createElement("option");
+      op.value = d.id;
+      op.textContent = d.data().title;
+      fileSelect.appendChild(op);
+    });
+
+    hideNote();
+  }
+
+  window.openSelectedFile = async function(){
+    const fileSelect = document.getElementById("fileSelect");
+    currentFileId = fileSelect.value;
+
+    if(!currentFileId){ alert("ファイルなし"); return; }
+
+    readOnly = false;
+    document.getElementById("addNoteBtn").disabled = false;
+
+    hideNote();
+    loadNotes();
+  };
+
+  window.openByPassword = async function () {
+    const pass = document.getElementById("otherPassword").value.trim();
+    if (!pass) { alert("パスワードを入力してね"); return; }
+
+    const q = query(collection(db, "files"));
+    const snap = await getDocs(q);
+
+    let found = null;
+
+    snap.forEach(d => {
+      if (d.data().password === hash(pass)) {
+        found = d;
+      }
+    });
+
+    if (!found) { alert("見つからないよ"); return; }
+
+    currentFileId = found.id;
+    readOnly = true;
+    document.getElementById("addNoteBtn").disabled = true;
+
+    hideNote();
+    loadNotes();
+  };
+
+  async function loadNotes(){
+    const notesList = document.getElementById("notesList");
+    notesList.innerHTML = "";
+    hideNote();
+
+    const q = query(
+      collection(db,"files",currentFileId,"notes"),
+      orderBy("order")
+    );
+
+    const snap = await getDocs(q);
+
+    snap.forEach(d=>{
+      const data = d.data();
+
+      const div = document.createElement("div");
+      div.className = "noteItem";
+      div.dataset.id = d.id;
+
+      div.innerHTML = `
+        <div>${data.title}</div>
+        <div class="noteButtons">
+          <button onclick="viewNote('${d.id}')">開く</button>
+          ${!readOnly ? `<button onclick="editNote('${d.id}')">編集</button>` : ""}
+          ${!readOnly ? `<button onclick="deleteNote('${d.id}')">削除</button>` : ""}
+        </div>
+      `;
+
+      notesList.appendChild(div);
+    });
+  }
+
+  window.viewNote = async function(noteId){
+    currentNoteId = noteId;
+    const snap = await getDoc(
+      doc(db,"files",currentFileId,"notes",noteId)
+    );
+    const data = snap.data();
+
+    const noteText = document.getElementById("noteText");
+    noteText.value = data.content;
+    noteText.disabled = true;
+  };
+
+  window.editNote = async function(noteId){
+    if(readOnly)return;
+
+    currentNoteId = noteId;
+    const snap = await getDoc(
+      doc(db,"files",currentFileId,"notes",noteId)
+    );
+    const noteText = document.getElementById("noteText");
+    noteText.value = snap.data().content;
+    noteText.disabled = false;
+
+    startAutoSave();
+  };
+
+  window.saveNote = async function(auto=false){
+    if(readOnly)return;
+    if(!currentNoteId)return;
+
+    const noteText = document.getElementById("noteText");
+
+    await updateDoc(
+      doc(db,"files",currentFileId,"notes",currentNoteId),
+      { content:noteText.value }
+    );
+
+    if(!auto) alert("保存した");
+  };
+
+  function startAutoSave(){
+    if(autoSaveTimer) clearInterval(autoSaveTimer);
+
+    autoSaveTimer = setInterval(()=>{
+      if(!readOnly && currentNoteId){
+        saveNote(true);
+      }
+    },5000);
+  }
+
+  window.deleteNote = async function(noteId){
+    if(readOnly)return;
+
+    if(!confirm("削除する？"))return;
+    await deleteDoc(
+      doc(db,"files",currentFileId,"notes",noteId)
+    );
+    if(currentNoteId === noteId){
+      currentNoteId = null;
+      hideNote();
+    }
+    loadNotes();
+  };
+
+  window.closeNote = function () {
+    currentNoteId = null;
+    hideNote();
+    if(autoSaveTimer) clearInterval(autoSaveTimer);
+  };
+
+  window.deleteFile = async function () {
+    if (!currentFileId) {
+      alert("ファイルを選んでください");
+      return;
+    }
+
+    if (!confirm("本当に削除しますか？")) return;
+
+    const notesSnap = await getDocs(
+      collection(db, "files", currentFileId, "notes")
+    );
+
+    for (const n of notesSnap.docs) {
+      await deleteDoc(doc(db, "files", currentFileId, "notes", n.id));
+    }
+
+    await deleteDoc(doc(db, "files", currentFileId));
+
+    alert("ファイルを削除しました");
+
+    currentFileId = null;
+    currentNoteId = null;
+    document.getElementById("notesList").innerHTML = "";
+    hideNote();
+    document.getElementById("addNoteBtn").disabled = true;
+
+    loadMyFiles();
+  };
+
+  window.addNote = async function(){
+    if(!currentFileId){ alert("ファイルを開いてね"); return; }
+
+    const title = prompt("ノートのタイトル");
+    if(!title) return;
+
+    const q = query(
+      collection(db,"files",currentFileId,"notes"),
+      orderBy("order")
+    );
+    const snap = await getDocs(q);
+
+    let maxOrder = 0;
+    snap.forEach(d=>{
+      if(d.data().order > maxOrder) maxOrder = d.data().order;
+    });
+
+    await addDoc(collection(db,"files",currentFileId,"notes"),{
+      title,
+      content:"",
+      order:maxOrder+1
+    });
+
+    loadNotes();
+  };
+</script>
+
+</body>
+</html>
