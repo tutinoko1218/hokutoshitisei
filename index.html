@@ -403,13 +403,13 @@ async function loadNotes(){
   notesList.innerHTML = "";
   hideNote();
 
-  /* ▼ まず order が無いノートを自動修正 */
+  /* ▼ まず order が無いノートを自動修正（ここが最重要） */
   await fixMissingOrder();
 
+  /* ▼ order が揃った後に並び替え */
   const q = query(
     collection(db,"files",currentFileId,"notes"),
-    orderBy("order"),
-    orderBy("createdAt")
+    orderBy("order")
   );
 
   const snap = await getDocs(q);
