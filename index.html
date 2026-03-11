@@ -21,7 +21,7 @@ button {
 
 /* ▼ クラシックモード（旧オトナモード） */
 body.classic-mode {
-  color:#fff;
+  color:#000;
 }
 
 /* ▼ クラシックモード：黒背景 */
@@ -35,15 +35,30 @@ body.classic-mode.black button {
   color:#fff;
 }
 
-/* ▼ クラシックモード：和風モダン背景（CSSで再現） */
+/* ▼ クラシックモード：和紙 × 薄い青（和紙感MAX） */
 body.classic-mode.wafu {
-  background: linear-gradient(135deg, #f7f2e8 0%, #e8dfc8 40%, #b89f6b 70%, #000 100%);
-  color:#000;
+  color: #000;
+  background:
+    /* 和紙の繊維（細かい粒子） */
+    radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px),
+    radial-gradient(rgba(255,255,255,0.4) 1px, transparent 1px),
+    /* 和紙のムラ（淡い揺らぎ） */
+    linear-gradient(135deg, rgba(230,240,250,0.9), rgba(240,245,255,0.95)),
+    linear-gradient(0deg, rgba(255,255,255,0.9), rgba(240,240,240,0.95));
+  
+  background-size:
+    3px 3px,
+    5px 5px,
+    100% 100%,
+    100% 100%;
+
+  background-blend-mode: soft-light;
 }
 
 body.classic-mode.wafu button {
-  background:#b89f6b;
+  background:#e0e8f5;
   color:#000;
+  border:1px solid #b0bfd5;
 }
 
 /* ▼ ノート全画面（クラシックモード時） */
@@ -241,6 +256,29 @@ setPersistence(auth, browserLocalPersistence)
     loadMyFiles();
   });
 
+/* ▼ order が無いノートを自動修正 */
+async function fixMissingOrder() {
+  const notesRef = collection(db, "files", currentFileId, "notes");
+  const snap = await getDocs(notesRef);
+
+  let index = 0;
+  const updates = [];
+
+  snap.forEach(docSnap => {
+    const data = docSnap.data();
+    if (data.order === undefined) {
+      updates.push(
+        updateDoc(doc(db, "files", currentFileId, "notes", docSnap.id), {
+          order: index
+        })
+      );
+    }
+    index++;
+  });
+
+  await Promise.all(updates);
+}
+
 /* ▼ ファイル作成 */
 window.createFile = async function(){
   const title = document.getElementById("fileTitle").value.trim();
@@ -364,6 +402,9 @@ async function loadNotes(){
   const notesList = document.getElementById("notesList");
   notesList.innerHTML = "";
   hideNote();
+
+  /* ▼ まず order が無いノートを自動修正 */
+  await fixMissingOrder();
 
   const q = query(
     collection(db,"files",currentFileId,"notes"),
