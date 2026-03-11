@@ -11,6 +11,7 @@ body{
   font-family:sans-serif;
   padding:20px;
   background:#fff7d1;
+  transition: background 0.3s, color 0.3s;
 }
 
 /* ▼ 通常モード：ボタンは元の大きさ */
@@ -18,23 +19,39 @@ button {
   margin: 10px 0;
 }
 
-/* ▼ オトナモード：背景ブラック＋文字白 */
-body.adult-mode {
+/* ▼ クラシックモード（旧オトナモード） */
+body.classic-mode {
+  color:#fff;
+}
+
+/* ▼ クラシックモード：黒背景 */
+body.classic-mode.black {
   background:#000;
   color:#fff;
 }
 
-body.adult-mode button {
+body.classic-mode.black button {
   background:#333;
   color:#fff;
 }
 
-body.adult-mode input,
-body.adult-mode select,
-body.adult-mode textarea {
-  background:#222;
-  color:#fff;
-  border:1px solid #555;
+/* ▼ クラシックモード：和風モダン背景（CSSで再現） */
+body.classic-mode.wafu {
+  background: linear-gradient(135deg, #f7f2e8 0%, #e8dfc8 40%, #b89f6b 70%, #000 100%);
+  color:#000;
+}
+
+body.classic-mode.wafu button {
+  background:#b89f6b;
+  color:#000;
+}
+
+/* ▼ ノート全画面（クラシックモード時） */
+body.classic-mode #noteText {
+  width:100%;
+  height:90vh;
+  font-size:22px;
+  line-height:1.9;
 }
 
 /* ▼ ノート内容は最初は非表示 */
@@ -72,6 +89,7 @@ body.adult-mode textarea {
   justify-content:space-between;
   align-items:center;
   box-shadow:0 2px 5px rgba(0,0,0,0.1);
+  cursor:grab;
 }
 .noteButtons button{
   margin-left:8px;
@@ -83,7 +101,12 @@ body.adult-mode textarea {
 <h1>北斗七星</h1>
 
 <h2>モード切り替え</h2>
-<button id="adultModeBtn" onclick="toggleMode()">オトナモード：OFF</button>
+<button id="classicModeBtn" onclick="toggleClassicMode()">クラシックモード：OFF</button>
+
+<div id="classicThemeButtons" style="display:none;">
+  <button onclick="setClassicTheme('black')">黒背景</button>
+  <button onclick="setClassicTheme('wafu')">和風モダン</button>
+</div>
 
 <h2>ファイル生成</h2>
 <div>ファイル名</div>
@@ -94,7 +117,6 @@ body.adult-mode textarea {
 <button id="createBtn" onclick="createFile()" disabled>生成</button>
 
 <hr>
-
 <h2>ファイル選択</h2>
 
 <select id="fileSelect"
@@ -109,12 +131,12 @@ body.adult-mode textarea {
 
 <hr>
 
-<h2>オトナモード専用ファイル</h2>
-<button onclick="openAdultFile()">パスワード無しで開く</button>
+<h2>クラシックモード専用ファイル</h2>
+<button onclick="openClassicFile()">パスワード無しで開く</button>
 
 <hr>
 
-<h2>ノート一覧</h2>
+<h2>ノート一覧（ドラッグで並び替え）</h2>
 <div id="notesList"></div>
 <button id="addNoteBtn" onclick="addNote()" disabled>＋ノートを追加</button>
 
@@ -178,6 +200,7 @@ const auth = getAuth(app);
 let currentFileId = null;
 let currentNoteId = null;
 let readOnly = false;
+let autoSaveTimer = null;
 
 /* ▼ パスワードハッシュ */
 function hash(str){
@@ -278,7 +301,6 @@ window.openSelectedFile = function(){
   hideNote();
   loadNotes();
 };
-
 /* ▼ 他人のファイルを開く */
 window.openByPassword = async function () {
   const pass = document.getElementById("otherPassword").value.trim();
@@ -311,8 +333,8 @@ window.openByPassword = async function () {
   loadNotes();
 };
 
-/* ▼ オトナモード：パスワード無しファイルを開く */
-window.openAdultFile = async function () {
+/* ▼ クラシックモード：パスワード無しファイルを開く */
+window.openClassicFile = async function () {
   const q = query(collection(db, "files"));
   const snap = await getDocs(q);
 
@@ -337,7 +359,7 @@ window.openAdultFile = async function () {
   loadNotes();
 };
 
-/* ▼ ノート一覧 */
+/* ▼ ノート一覧（並び替え対応） */
 async function loadNotes(){
   const notesList = document.getElementById("notesList");
   notesList.innerHTML = "";
@@ -345,6 +367,7 @@ async function loadNotes(){
 
   const q = query(
     collection(db,"files",currentFileId,"notes"),
+    orderBy("order"),
     orderBy("createdAt")
   );
 
@@ -355,6 +378,8 @@ async function loadNotes(){
 
     const div = document.createElement("div");
     div.className = "noteItem";
+    div.draggable = true;
+    div.dataset.id = d.id;
 
     div.innerHTML = `
       <div>${data.title}</div>
@@ -367,6 +392,52 @@ async function loadNotes(){
 
     notesList.appendChild(div);
   });
+
+  enableDragSort();
+}
+
+/* ▼ ドラッグ並び替え */
+function enableDragSort(){
+  const list = document.getElementById("notesList");
+  let dragItem = null;
+
+  list.querySelectorAll(".noteItem").forEach(item=>{
+    item.addEventListener("dragstart",()=>{
+      dragItem = item;
+      item.style.opacity = "0.5";
+    });
+
+    item.addEventListener("dragend",()=>{
+      item.style.opacity = "1";
+      saveOrder();
+    });
+
+    item.addEventListener("dragover",(e)=>{
+      e.preventDefault();
+      const rect = item.getBoundingClientRect();
+      const offset = e.clientY - rect.top;
+      if(offset > rect.height/2){
+        item.after(dragItem);
+      }else{
+        item.before(dragItem);
+      }
+    });
+  });
+}
+
+/* ▼ 並び順保存 */
+async function saveOrder(){
+  const list = document.getElementById("notesList").children;
+  let index = 0;
+
+  for(const item of list){
+    const id = item.dataset.id;
+    await updateDoc(
+      doc(db,"files",currentFileId,"notes",id),
+      { order:index }
+    );
+    index++;
+  }
 }
 
 /* ▼ ノート追加 */
@@ -381,6 +452,7 @@ window.addNote = async function(){
     {
       title,
       content:"",
+      order:999999,
       ownerUid: auth.currentUser.uid,
       createdAt: serverTimestamp()
     }
@@ -422,10 +494,12 @@ window.editNote = async function(noteId){
   noteText.value = snap.data().content;
   noteText.disabled = false;
   showNote();
+
+  startAutoSave();
 };
 
-/* ▼ ノート保存 */
-window.saveNote = async function(){
+/* ▼ ノート保存（手動 or 自動） */
+window.saveNote = async function(auto=false){
   if(readOnly)return;
   if(!currentNoteId)return;
 
@@ -435,8 +509,20 @@ window.saveNote = async function(){
     doc(db,"files",currentFileId,"notes",currentNoteId),
     { content:noteText.value }
   );
-  alert("保存した");
+
+  if(!auto) alert("保存した");
 };
+
+/* ▼ 自動保存開始 */
+function startAutoSave(){
+  if(autoSaveTimer) clearInterval(autoSaveTimer);
+
+  autoSaveTimer = setInterval(()=>{
+    if(!readOnly && currentNoteId){
+      saveNote(true);
+    }
+  },5000);
+}
 
 /* ▼ ノート削除 */
 window.deleteNote = async function(noteId){
@@ -457,6 +543,7 @@ window.deleteNote = async function(noteId){
 window.closeNote = function () {
   currentNoteId = null;
   hideNote();
+  if(autoSaveTimer) clearInterval(autoSaveTimer);
 };
 
 /* ▼ ファイルを閉じる */
@@ -523,20 +610,36 @@ window.changePassword = async function () {
   alert("パスワードを変更しました");
 };
 
-/* ▼ オトナモード切り替え */
-window.toggleMode = function () {
+/* ▼ クラシックモード切り替え */
+window.toggleClassicMode = function () {
   const body = document.body;
-  const btn = document.getElementById("adultModeBtn");
+  const btn = document.getElementById("classicModeBtn");
+  const themeBtns = document.getElementById("classicThemeButtons");
 
-  if (body.classList.contains("adult-mode")) {
-    body.classList.remove("adult-mode");
-    btn.textContent = "オトナモード：OFF";
+  if (body.classList.contains("classic-mode")) {
+    body.classList.remove("classic-mode","black","wafu");
+    btn.textContent = "クラシックモード：OFF";
+    themeBtns.style.display = "none";
   } else {
-    body.classList.add("adult-mode");
-    btn.textContent = "オトナモード：ON";
+    body.classList.add("classic-mode","black");
+    btn.textContent = "クラシックモード：ON";
+    themeBtns.style.display = "block";
   }
 };
-</script>
 
+/* ▼ クラシックモードの背景テーマ切り替え */
+window.setClassicTheme = function (theme) {
+  const body = document.body;
+
+  body.classList.remove("black", "wafu");
+
+  if (theme === "black") {
+    body.classList.add("black");
+  } else if (theme === "wafu") {
+    body.classList.add("wafu");
+  }
+};
+
+</script>
 </body>
 </html>
