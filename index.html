@@ -13,10 +13,32 @@ body{
   background:#fff7d1;
 }
 
-input,button,select{
-  font-size:18px;
-  padding:8px;
-  margin:5px 0;
+/* ▼ 通常モード：ボタン1.8倍 */
+button {
+  transform: scale(1.8);
+  transform-origin: left top;
+  margin: 20px 0;
+}
+
+/* ▼ オトナモード：背景ブラック＋文字白 */
+body.adult-mode {
+  background:#000;
+  color:#fff;
+}
+
+body.adult-mode button {
+  background:#333;
+  color:#fff;
+  transform: scale(2.2);
+  transform-origin: left top;
+}
+
+body.adult-mode input,
+body.adult-mode select,
+body.adult-mode textarea {
+  background:#222;
+  color:#fff;
+  border:1px solid #555;
 }
 
 /* ▼ ノート内容は最初は非表示 */
@@ -58,73 +80,14 @@ input,button,select{
 .noteButtons button{
   margin-left:8px;
 }
-
-/* ▼ スマホ（幅 768px 以下）だけに適用される */
-@media screen and (max-width: 768px) {
-
-  body {
-    padding: 20px;
-  }
-
-  input, button, select {
-    font-size: 26px;
-    padding: 20px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  #fileSelect {
-    width: 100%;
-    font-size: 26px;
-    padding: 20px;
-  }
-
-  #addNoteBtn {
-    width: 100%;
-    font-size: 28px;
-    padding: 24px;
-  }
-
-  .noteItem {
-    flex-direction: column;
-    align-items: flex-start;
-    font-size: 26px;
-    padding: 22px;
-  }
-
-  .noteButtons {
-    margin-top: 14px;
-    width: 100%;
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .noteButtons button {
-    font-size: 24px;
-    padding: 16px 20px;
-    width: auto;
-  }
-
-  #noteText {
-    height: 500px;
-    font-size: 26px;
-    padding: 24px;
-    width: 100%;
-    box-sizing: border-box;
-    line-height: 2.0;
-  }
-
-  button {
-    margin: 12px 0;
-    font-size: 28px;
-    padding: 24px;
-  }
-}
 </style>
 </head>
 <body>
 
 <h1>北斗七星</h1>
+
+<h2>モード切り替え</h2>
+<button id="adultModeBtn" onclick="toggleMode()">オトナモード：OFF</button>
 
 <h2>ファイル生成</h2>
 <div>ファイル名</div>
@@ -150,6 +113,11 @@ input,button,select{
 
 <hr>
 
+<h2>オトナモード専用ファイル</h2>
+<button onclick="openAdultFile()">パスワード無しで開く</button>
+
+<hr>
+
 <h2>ノート一覧</h2>
 <div id="notesList"></div>
 <button id="addNoteBtn" onclick="addNote()" disabled>＋ノートを追加</button>
@@ -162,15 +130,6 @@ input,button,select{
 <br>
 <button onclick="saveNote()">保存</button>
 <button onclick="closeNote()">閉じる</button>
-
-<hr>
-
-<h2>他の人のノートをみる</h2>
-<div>パスワードをいれてください</div>
-
-<input id="otherPassword" type="password">
-<button onclick="togglePassword()">👁️</button>
-<button onclick="openByPassword()">開く</button>
 
 <hr>
 <script type="module">
@@ -342,6 +301,32 @@ window.openByPassword = async function () {
   currentFileId = found.id;
   readOnly = true;
   document.getElementById("addNoteBtn").disabled = true;
+
+  hideNote();
+  loadNotes();
+};
+
+/* ▼ オトナモード：パスワード無しファイルを開く */
+window.openAdultFile = async function () {
+  const q = query(collection(db, "files"));
+  const snap = await getDocs(q);
+
+  let found = null;
+
+  snap.forEach(d => {
+    if (!d.data().password) {
+      found = d;
+    }
+  });
+
+  if (!found) {
+    alert("パスワード無しのファイルがありません");
+    return;
+  }
+
+  currentFileId = found.id;
+  readOnly = false;
+  document.getElementById("addNoteBtn").disabled = false;
 
   hideNote();
   loadNotes();
@@ -531,6 +516,431 @@ window.changePassword = async function () {
   });
 
   alert("パスワードを変更しました");
+};
+
+/* ▼ オトナモード切り替え */
+window.toggleMode = function () {
+  const body = document.body;
+  const btn = document.getElementById("adultModeBtn");
+
+  if (body.classList.contains("adult-mode")) {
+    body.classList.remove("adult-mode");
+    btn.textContent = "オトナモード：OFF";
+  } else {
+    body.classList.add("adult-mode");
+    btn.textContent = "オトナモード：ON";
+  }
+};
+</script>
+
+</body>
+</html>
+<h2>他の人のノートをみる</h2>
+<div>パスワードをいれてください</div>
+
+<input id="otherPassword" type="password">
+<button onclick="togglePassword()">👁️</button>
+<button onclick="openByPassword()">開く</button>
+
+<hr>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  doc,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+import {
+  getAuth,
+  signInAnonymously,
+  browserLocalPersistence,
+  setPersistence
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBPl_QKfAZM8TmWEtbi4rXb4ZasdM9WOQg",
+  authDomain: "hokutoshitisei.firebaseapp.com",
+  projectId: "hokutoshitisei",
+  storageBucket: "hokutoshitisei.appspot.com",
+  messagingSenderId: "16257405689",
+  appId: "1:16257405689:web:17e7b92362c56d82b48828",
+  measurementId: "G-LFGEC7VKN3"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+let currentFileId = null;
+let currentNoteId = null;
+let readOnly = false;
+
+/* ▼ パスワードハッシュ */
+function hash(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+/* ▼ ノート非表示 */
+function hideNote(){
+  const noteText = document.getElementById("noteText");
+  noteText.value = "";
+  noteText.disabled = true;
+  noteText.style.display = "none";
+}
+
+/* ▼ ノート表示 */
+function showNote(){
+  const noteText = document.getElementById("noteText");
+  noteText.style.display = "block";
+}
+
+/* ▼ パスワード目玉 */
+window.togglePassword = function () {
+  const input = document.getElementById("otherPassword");
+  input.type = (input.type === "password") ? "text" : "password";
+};
+
+/* ▼ スマホ対策：選択した瞬間に更新 */
+window.selectFileChanged = function () {
+  const fileSelect = document.getElementById("fileSelect");
+  currentFileId = fileSelect.value;
+};
+
+/* ▼ ログイン後 */
+setPersistence(auth, browserLocalPersistence)
+  .then(() => signInAnonymously(auth))
+  .then(() => {
+    document.getElementById("createBtn").disabled = false;
+    loadMyFiles();
+  });
+
+/* ▼ ファイル作成 */
+window.createFile = async function(){
+  const title = document.getElementById("fileTitle").value.trim();
+  const pass  = document.getElementById("filePassword").value.trim();
+  if(!title || !pass){
+    alert("入力してね");
+    return;
+  }
+
+  await addDoc(collection(db,"files"),{
+    title,
+    password:hash(pass),
+    ownerUid:auth.currentUser.uid,
+    createdAt:serverTimestamp()
+  });
+
+  alert("作成しました");
+  loadMyFiles();
+};
+
+/* ▼ 自分のファイル一覧 */
+async function loadMyFiles(){
+  const fileSelect = document.getElementById("fileSelect");
+  fileSelect.innerHTML = "";
+
+  const q = query(
+    collection(db,"files"),
+    where("ownerUid","==",auth.currentUser.uid),
+    orderBy("createdAt")
+  );
+
+  const snap = await getDocs(q);
+
+  snap.forEach(d=>{
+    const op = document.createElement("option");
+    op.value = d.id;
+    op.textContent = d.data().title;
+    fileSelect.appendChild(op);
+  });
+
+  hideNote();
+}
+
+/* ▼ ファイルを開く */
+window.openSelectedFile = function(){
+  const fileSelect = document.getElementById("fileSelect");
+
+  currentFileId = fileSelect.value;
+
+  if(!currentFileId){
+    alert("ファイルなし");
+    return;
+  }
+
+  readOnly = false;
+  document.getElementById("addNoteBtn").disabled = false;
+
+  hideNote();
+  loadNotes();
+};
+
+/* ▼ 他人のファイルを開く */
+window.openByPassword = async function () {
+  const pass = document.getElementById("otherPassword").value.trim();
+  if (!pass) {
+    alert("パスワードを入力してね");
+    return;
+  }
+
+  const q = query(collection(db, "files"));
+  const snap = await getDocs(q);
+
+  let found = null;
+
+  snap.forEach(d => {
+    if (d.data().password === hash(pass)) {
+      found = d;
+    }
+  });
+
+  if (!found) {
+    alert("見つからないよ");
+    return;
+  }
+
+  currentFileId = found.id;
+  readOnly = true;
+  document.getElementById("addNoteBtn").disabled = true;
+
+  hideNote();
+  loadNotes();
+};
+
+/* ▼ オトナモード：パスワード無しファイルを開く */
+window.openAdultFile = async function () {
+  const q = query(collection(db, "files"));
+  const snap = await getDocs(q);
+
+  let found = null;
+
+  snap.forEach(d => {
+    if (!d.data().password) {
+      found = d;
+    }
+  });
+
+  if (!found) {
+    alert("パスワード無しのファイルがありません");
+    return;
+  }
+
+  currentFileId = found.id;
+  readOnly = false;
+  document.getElementById("addNoteBtn").disabled = false;
+
+  hideNote();
+  loadNotes();
+};
+
+/* ▼ ノート一覧 */
+async function loadNotes(){
+  const notesList = document.getElementById("notesList");
+  notesList.innerHTML = "";
+  hideNote();
+
+  const q = query(
+    collection(db,"files",currentFileId,"notes"),
+    orderBy("createdAt")
+  );
+
+  const snap = await getDocs(q);
+
+  snap.forEach(d=>{
+    const data = d.data();
+
+    const div = document.createElement("div");
+    div.className = "noteItem";
+
+    div.innerHTML = `
+      <div>${data.title}</div>
+      <div class="noteButtons">
+        <button onclick="viewNote('${d.id}')">開く</button>
+        ${!readOnly ? `<button onclick="editNote('${d.id}')">編集</button>` : ""}
+        ${!readOnly ? `<button onclick="deleteNote('${d.id}')">削除</button>` : ""}
+      </div>
+    `;
+
+    notesList.appendChild(div);
+  });
+}
+
+/* ▼ ノート追加 */
+window.addNote = async function(){
+  if(readOnly)return;
+
+  const title = prompt("ノート名");
+  if(!title)return;
+
+  const newNote = await addDoc(
+    collection(db,"files",currentFileId,"notes"),
+    {
+      title,
+      content:"",
+      ownerUid: auth.currentUser.uid,
+      createdAt: serverTimestamp()
+    }
+  );
+
+  currentNoteId = newNote.id;
+
+  const noteText = document.getElementById("noteText");
+  noteText.disabled = false;
+  noteText.value = "";
+  showNote();
+
+  loadNotes();
+};
+
+/* ▼ ノート観覧 */
+window.viewNote = async function(noteId){
+  currentNoteId = noteId;
+  const snap = await getDoc(
+    doc(db,"files",currentFileId,"notes",noteId)
+  );
+  const data = snap.data();
+
+  const noteText = document.getElementById("noteText");
+  noteText.value = data.content;
+  noteText.disabled = true;
+  showNote();
+};
+
+/* ▼ ノート編集 */
+window.editNote = async function(noteId){
+  if(readOnly)return;
+
+  currentNoteId = noteId;
+  const snap = await getDoc(
+    doc(db,"files",currentFileId,"notes",noteId)
+  );
+  const noteText = document.getElementById("noteText");
+  noteText.value = snap.data().content;
+  noteText.disabled = false;
+  showNote();
+};
+
+/* ▼ ノート保存 */
+window.saveNote = async function(){
+  if(readOnly)return;
+  if(!currentNoteId)return;
+
+  const noteText = document.getElementById("noteText");
+
+  await updateDoc(
+    doc(db,"files",currentFileId,"notes",currentNoteId),
+    { content:noteText.value }
+  );
+  alert("保存した");
+};
+
+/* ▼ ノート削除 */
+window.deleteNote = async function(noteId){
+  if(readOnly)return;
+
+  if(!confirm("削除する？"))return;
+  await deleteDoc(
+    doc(db,"files",currentFileId,"notes",noteId)
+  );
+  if(currentNoteId === noteId){
+    currentNoteId = null;
+    hideNote();
+  }
+  loadNotes();
+};
+
+/* ▼ ノートだけ閉じる */
+window.closeNote = function () {
+  currentNoteId = null;
+  hideNote();
+};
+
+/* ▼ ファイルを閉じる */
+window.closeFile = function () {
+  currentFileId = null;
+  currentNoteId = null;
+
+  document.getElementById("notesList").innerHTML = "";
+  hideNote();
+  document.getElementById("addNoteBtn").disabled = true;
+
+  alert("ファイルを閉じました");
+};
+
+/* ▼ ファイル削除 */
+window.deleteFile = async function () {
+  if (!currentFileId) {
+    alert("ファイルを選んでください");
+    return;
+  }
+
+  if (!confirm("本当に削除しますか？")) return;
+
+  const notesSnap = await getDocs(
+    collection(db, "files", currentFileId, "notes")
+  );
+
+  for (const n of notesSnap.docs) {
+    await deleteDoc(doc(db, "files", currentFileId, "notes", n.id));
+  }
+
+  await deleteDoc(doc(db, "files", currentFileId));
+
+  alert("ファイルを削除しました");
+
+  currentFileId = null;
+  currentNoteId = null;
+  document.getElementById("notesList").innerHTML = "";
+  hideNote();
+  document.getElementById("addNoteBtn").disabled = true;
+
+  loadMyFiles();
+};
+
+/* ▼ パスワード変更 */
+window.changePassword = async function () {
+  if (!currentFileId) {
+    alert("ファイルを開いてください");
+    return;
+  }
+
+  if (readOnly) {
+    alert("他人のファイルは変更できません");
+    return;
+  }
+
+  const newPass = prompt("新しいパスワードを入力してください");
+  if (!newPass) return;
+
+  await updateDoc(doc(db, "files", currentFileId), {
+    password: hash(newPass)
+  });
+
+  alert("パスワードを変更しました");
+};
+
+/* ▼ オトナモード切り替え */
+window.toggleMode = function () {
+  const body = document.body;
+  const btn = document.getElementById("adultModeBtn");
+
+  if (body.classList.contains("adult-mode")) {
+    body.classList.remove("adult-mode");
+    btn.textContent = "オトナモード：OFF";
+  } else {
+    body.classList.add("adult-mode");
+    btn.textContent = "オトナモード：ON";
+  }
 };
 </script>
 
