@@ -340,7 +340,6 @@ window.openSelectedFile = function(){
   hideNote();
   loadNotes();
 };
-
 /* ▼ 他人のファイルを開く */
 window.openByPassword = async function () {
   const pass = document.getElementById("otherPassword").value.trim();
@@ -373,7 +372,7 @@ window.openByPassword = async function () {
   loadNotes();
 };
 
-/* ▼ クラシックモード：パスワード無しファイルを開く */
+/* ▼ クラシックモード：パスワード無しファイルを開く（修正版） */
 window.openClassicFile = async function () {
   const q = query(collection(db, "files"));
   const snap = await getDocs(q);
@@ -381,7 +380,8 @@ window.openClassicFile = async function () {
   let found = null;
 
   snap.forEach(d => {
-    if (!d.data().password) {
+    // ★ 修正ポイント：空文字だけをパスワード無し扱い
+    if (d.data().password === "") {
       found = d;
     }
   });
@@ -405,7 +405,7 @@ async function loadNotes(){
   notesList.innerHTML = "";
   hideNote();
 
-  /* ▼ まず order が無いノートを自動修正（最重要） */
+  /* ▼ order が無いノートを自動修正 */
   await fixMissingOrder();
 
   const q = query(
@@ -681,7 +681,3 @@ window.setClassicTheme = function (theme) {
     body.classList.add("wafu");
   }
 };
-
-</script>
-</body>
-</html>
