@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>北斗七星</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>北斗七星</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
@@ -15,7 +15,7 @@
   <section class="block">
     <h2>ファイル作成</h2>
     <input id="fileTitle" type="text" placeholder="ファイル名">
-    <input id="filePassword" type="password" placeholder="パスワード（空でもOK）">
+    <input id="filePassword" type="password" placeholder="パスワード（必須）">
     <button id="createBtn" disabled onclick="createFile()">作成</button>
   </section>
 
@@ -35,11 +35,10 @@
     <button onclick="openByPassword()">開く</button>
   </section>
 
-  <!-- ▼ クラシックモード -->
+  <!-- ▼ クラシックモード（見た目だけ） -->
   <section class="block">
     <h2>クラシックモード</h2>
     <button id="classicModeBtn" onclick="toggleClassicMode()">クラシックモード：OFF</button>
-    <button onclick="openClassicFile()">パスワード無しで開く</button>
 
     <div id="classicThemeButtons" style="display:none; margin-top:10px;">
       <button onclick="setClassicTheme('black')">黒</button>
@@ -63,6 +62,11 @@
   </section>
 
 </div>
+
+<script type="module" src="script.js"></script>
+
+</body>
+</html>
 body {
   margin: 0;
   padding: 0;
@@ -188,7 +192,6 @@ body.classic-mode.wafu button {
     margin-top: 8px;
   }
 }
-<script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
   getFirestore,
@@ -237,15 +240,13 @@ function hash(str){
   return btoa(unescape(encodeURIComponent(str)));
 }
 
-/* ▼ ノート非表示 */
+/* ▼ ノート非表示／表示 */
 function hideNote(){
   const noteText = document.getElementById("noteText");
   noteText.value = "";
   noteText.disabled = true;
   noteText.style.display = "none";
 }
-
-/* ▼ ノート表示 */
 function showNote(){
   const noteText = document.getElementById("noteText");
   noteText.style.display = "block";
@@ -257,13 +258,13 @@ window.togglePassword = function () {
   input.type = (input.type === "password") ? "text" : "password";
 };
 
-/* ▼ スマホ対策：選択した瞬間に更新 */
+/* ▼ ファイル選択変更 */
 window.selectFileChanged = function () {
   const fileSelect = document.getElementById("fileSelect");
   currentFileId = fileSelect.value;
 };
 
-/* ▼ ログイン後 */
+/* ▼ ログイン */
 setPersistence(auth, browserLocalPersistence)
   .then(() => signInAnonymously(auth))
   .then(() => {
@@ -273,6 +274,7 @@ setPersistence(auth, browserLocalPersistence)
 
 /* ▼ order が無いノートを自動修正 */
 async function fixMissingOrder() {
+  if (!currentFileId) return;
   const notesRef = collection(db, "files", currentFileId, "notes");
   const snap = await getDocs(notesRef);
 
@@ -294,7 +296,7 @@ async function fixMissingOrder() {
   await Promise.all(updates);
 }
 
-/* ▼ ファイル作成（パスワード空OK版） */
+/* ▼ ファイル作成（パスワード必須） */
 window.createFile = async function(){
   const title = document.getElementById("fileTitle").value.trim();
   const pass  = document.getElementById("filePassword").value.trim();
@@ -303,10 +305,14 @@ window.createFile = async function(){
     alert("ファイル名を入力してね");
     return;
   }
+  if(!pass){
+    alert("パスワードは必須だよ");
+    return;
+  }
 
   await addDoc(collection(db,"files"),{
     title,
-    password: pass ? hash(pass) : "",   // ← 空なら空文字で保存
+    password: hash(pass),
     ownerUid: auth.currentUser.uid,
     createdAt: serverTimestamp()
   });
@@ -338,10 +344,9 @@ async function loadMyFiles(){
   hideNote();
 }
 
-/* ▼ ファイルを開く */
-window.openSelectedFile = function(){
+/* ▼ 自分のファイルを開く（パスワード不要） */
+window.openSelectedFile = async function(){
   const fileSelect = document.getElementById("fileSelect");
-
   currentFileId = fileSelect.value;
 
   if(!currentFileId){
@@ -353,9 +358,10 @@ window.openSelectedFile = function(){
   document.getElementById("addNoteBtn").disabled = false;
 
   hideNote();
-  loadNotes();  // ← Part4 で定義される
+  loadNotes();
 };
-/* ▼ 他人のファイルを開く */
+
+/* ▼ 他人のファイルを開く（パスワード必須） */
 window.openByPassword = async function () {
   const pass = document.getElementById("otherPassword").value.trim();
   if (!pass) {
@@ -387,40 +393,12 @@ window.openByPassword = async function () {
   loadNotes();
 };
 
-/* ▼ クラシックモード：パスワード無しファイルを開く（空文字のみOK） */
-window.openClassicFile = async function () {
-  const q = query(collection(db, "files"));
-  const snap = await getDocs(q);
-
-  let found = null;
-
-  snap.forEach(d => {
-    // ★ 空文字だけをパスワード無し扱い
-    if (d.data().password === "") {
-      found = d;
-    }
-  });
-
-  if (!found) {
-    alert("パスワード無しのファイルがありません");
-    return;
-  }
-
-  currentFileId = found.id;
-  readOnly = false;
-  document.getElementById("addNoteBtn").disabled = false;
-
-  hideNote();
-  loadNotes();
-};
-
-/* ▼ ノート一覧（並び替え対応） */
+/* ▼ ノート一覧 */
 async function loadNotes(){
   const notesList = document.getElementById("notesList");
   notesList.innerHTML = "";
   hideNote();
 
-  /* ▼ order が無いノートを自動修正 */
   await fixMissingOrder();
 
   const q = query(
@@ -603,18 +581,6 @@ window.closeNote = function () {
   if(autoSaveTimer) clearInterval(autoSaveTimer);
 };
 
-/* ▼ ファイルを閉じる */
-window.closeFile = function () {
-  currentFileId = null;
-  currentNoteId = null;
-
-  document.getElementById("notesList").innerHTML = "";
-  hideNote();
-  document.getElementById("addNoteBtn").disabled = true;
-
-  alert("ファイルを閉じました");
-};
-
 /* ▼ ファイル削除 */
 window.deleteFile = async function () {
   if (!currentFileId) {
@@ -645,29 +611,7 @@ window.deleteFile = async function () {
   loadMyFiles();
 };
 
-/* ▼ パスワード変更 */
-window.changePassword = async function () {
-  if (!currentFileId) {
-    alert("ファイルを開いてください");
-    return;
-  }
-
-  if (readOnly) {
-    alert("他人のファイルは変更できません");
-    return;
-  }
-
-  const newPass = prompt("新しいパスワードを入力してください");
-  if (!newPass) return;
-
-  await updateDoc(doc(db, "files", currentFileId), {
-    password: hash(newPass)
-  });
-
-  alert("パスワードを変更しました");
-};
-
-/* ▼ クラシックモード切り替え */
+/* ▼ クラシックモード切り替え（見た目だけ） */
 window.toggleClassicMode = function () {
   const body = document.body;
   const btn = document.getElementById("classicModeBtn");
@@ -684,7 +628,7 @@ window.toggleClassicMode = function () {
   }
 };
 
-/* ▼ クラシックモードの背景テーマ切り替え */
+/* ▼ クラシックテーマ切り替え */
 window.setClassicTheme = function (theme) {
   const body = document.body;
 
@@ -696,7 +640,3 @@ window.setClassicTheme = function (theme) {
     body.classList.add("wafu");
   }
 };
-
-</script>
-</body>
-</html>
